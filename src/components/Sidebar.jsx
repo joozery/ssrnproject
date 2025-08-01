@@ -8,7 +8,8 @@ import {
   DollarSign, 
   FileText, 
   BarChart3,
-  Home
+  Home,
+  Receipt
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -20,7 +21,8 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
     { id: 'vehicles', label: 'ข้อมูลรถ', icon: Car },
     { id: 'bookings', label: 'จองงาน', icon: Calendar },
     { id: 'finance', label: 'การเงิน', icon: DollarSign },
-    { id: 'invoices', label: 'ใบแจ้งหนี้', icon: FileText },
+    { id: 'invoices', label: 'ใบแจ้งหนี้/ใบเสร็จรับเงิน', icon: FileText },
+
     { id: 'reports', label: 'รายงาน', icon: BarChart3 },
   ];
 

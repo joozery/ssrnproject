@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { X, Plus, Save, ArrowLeft, Printer, Send } from 'lucide-react';
+import { X, Plus, Save, ArrowLeft, Printer, Send, Loader2 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { useReactToPrint } from 'react-to-print';
 import InvoicePreview from '@/components/invoices/InvoicePreview';
@@ -19,6 +19,8 @@ const InvoiceEditor = ({
   onBack,
   companyInfo,
   docType = 'invoice',
+  isSubmitting = false,
+  isLoadingDetail = false,
 }) => {
   const [documentData, setDocumentData] = useState({
     docNumber: '',
@@ -38,8 +40,29 @@ const InvoiceEditor = ({
   const componentToPrintRef = useRef();
 
   const handlePrint = useReactToPrint({
-    content: () => componentToPrintRef.current,
-    onAfterPrint: () => setShowPreview(false),
+    content: () => {
+      console.log('🔍 Debug - handlePrint called');
+      console.log('🔍 Debug - componentToPrintRef.current:', componentToPrintRef.current);
+      return componentToPrintRef.current;
+    },
+    onAfterPrint: () => {
+      console.log('🔍 Debug - Print completed');
+      setShowPreview(false);
+    },
+    onBeforeGetContent: () => {
+      console.log('🔍 Debug - Before getting print content');
+    },
+    onBeforePrint: () => {
+      console.log('🔍 Debug - Before printing');
+    },
+    onPrintError: (error) => {
+      console.error('🔍 Debug - Print error:', error);
+      toast({
+        title: "เกิดข้อผิดพลาด",
+        description: "ไม่สามารถพิมพ์ได้: " + error.message,
+        variant: "destructive"
+      });
+    }
   });
 
   const typeLabels = {
@@ -55,17 +78,48 @@ const InvoiceEditor = ({
   };
 
   useEffect(() => {
+    console.log('🔍 Debug - InvoiceEditor useEffect triggered');
+    console.log('🔍 Debug - selectedDocument:', selectedDocument);
+    console.log('🔍 Debug - docType:', docType);
+    console.log('🔍 Debug - selectedDocument?.items:', selectedDocument?.items);
+    
     if (selectedDocument) {
-      setDocumentData({ 
+      // Convert backend items structure to frontend structure
+      const convertedItems = (selectedDocument.items || []).map(item => ({
+        description: item.description || '',
+        details: item.details || '',
+        quantity: Number(item.quantity) || 1,
+        unit: item.unit || 'หน่วย',
+        unitPrice: Number(item.unit_price || item.unitPrice) || 0,
+        discount: Number(item.discount) || 0,
+        amount: Number(item.amount) || 0
+      }));
+
+      console.log('🔍 Debug - convertedItems:', convertedItems);
+      console.log('🔍 Debug - convertedItems length:', convertedItems.length);
+      console.log('🔍 Debug - selectedDocument.issueDate:', selectedDocument.issueDate);
+      console.log('🔍 Debug - selectedDocument.dueDate:', selectedDocument.dueDate);
+
+      const newDocumentData = { 
         ...{
           includeVat: true,
           withholdingTax: 0,
           notes: '',
           internalNotes: '',
+          items: [{ description: '', details: '', quantity: 1, unit: '', unitPrice: 0, discount: 0 }]
         },
         ...selectedDocument,
         docNumber: selectedDocument.docNumber || selectedDocument.invoiceNumber,
-      });
+        issueDate: selectedDocument.issueDate || new Date().toISOString().split('T')[0],
+        dueDate: selectedDocument.dueDate || '',
+        items: convertedItems.length > 0 ? convertedItems : [{ description: '', details: '', quantity: 1, unit: '', unitPrice: 0, discount: 0 }],
+      };
+      
+      console.log('🔍 Debug - newDocumentData:', newDocumentData);
+      console.log('🔍 Debug - newDocumentData.issueDate:', newDocumentData.issueDate);
+      console.log('🔍 Debug - newDocumentData.dueDate:', newDocumentData.dueDate);
+      console.log('🔍 Debug - newDocumentData.items:', newDocumentData.items);
+      setDocumentData(newDocumentData);
     } else {
       const generateDocNumber = () => {
         const date = new Date();
@@ -85,8 +139,10 @@ const InvoiceEditor = ({
 
   const handleItemChange = (index, e) => {
     const { name, value } = e.target;
+    console.log('🔍 Debug - handleItemChange:', { index, name, value });
     const items = [...documentData.items];
     items[index][name] = value;
+    console.log('🔍 Debug - updated items:', items);
     setDocumentData({ ...documentData, items });
   };
 
@@ -117,8 +173,13 @@ const InvoiceEditor = ({
         invoiceNumber: documentData.docNumber, // for backward compatibility
         amount: total,
         id: selectedDocument ? selectedDocument.id : Date.now().toString(),
-        createdAt: selectedDocument ? selectedDocument.createdAt : new Date().toLocaleDateString('th-TH')
+        createdAt: selectedDocument ? selectedDocument.createdAt : new Date().toLocaleDateString('th-TH'),
+        documentType: documentData.type // เพิ่ม documentType เพื่อบอกว่าเป็นเอกสารประเภทไหน
     };
+    
+    console.log('🔍 Debug - Saving document with type:', documentData.type);
+    console.log('🔍 Debug - finalDocData:', finalDocData);
+    
     onSave(finalDocData);
   };
 
@@ -132,6 +193,13 @@ const InvoiceEditor = ({
   const selectedCustomer = customers.find(c => c.id === documentData.customerId);
 
   if (showPreview) {
+    console.log('🔍 Debug - Showing preview with documentData:', documentData);
+    console.log('🔍 Debug - selectedCustomer:', selectedCustomer);
+    console.log('🔍 Debug - companyInfo:', companyInfo);
+    console.log('🔍 Debug - companyInfo.name:', companyInfo?.name);
+    console.log('🔍 Debug - companyInfo.address:', companyInfo?.address);
+    console.log('🔍 Debug - companyInfo.taxId:', companyInfo?.taxId);
+    
     const totals = {
       subtotal: subtotal,
       totalDiscount: totalDiscount,
@@ -154,6 +222,29 @@ const InvoiceEditor = ({
     );
   }
 
+  console.log('🔍 Debug - InvoiceEditor render - documentData:', documentData);
+  console.log('🔍 Debug - InvoiceEditor render - documentData.issueDate:', documentData.issueDate);
+  console.log('🔍 Debug - InvoiceEditor render - documentData.dueDate:', documentData.dueDate);
+  console.log('🔍 Debug - InvoiceEditor render - documentData.items:', documentData.items);
+  console.log('🔍 Debug - InvoiceEditor render - customers:', customers);
+  console.log('🔍 Debug - InvoiceEditor render - companyInfo:', companyInfo);
+
+  // Error boundary check
+  if (!documentData) {
+    console.error('❌ Error: documentData is null or undefined');
+    return (
+      <div className="flex justify-center items-center py-12">
+        <div className="text-center">
+          <h2 className="text-xl font-bold text-red-600 mb-2">เกิดข้อผิดพลาด</h2>
+          <p className="text-muted-foreground">ไม่สามารถโหลดข้อมูลเอกสารได้</p>
+          <Button onClick={onBack} className="mt-4">
+            <ArrowLeft className="mr-2 h-4 w-4" /> กลับไปที่รายการ
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 100 }}
@@ -173,14 +264,30 @@ const InvoiceEditor = ({
             <span className="text-lg text-muted-foreground">{documentData.docNumber}</span>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowPreview(true)}>
+          <Button 
+            variant="outline" 
+            onClick={() => {
+              console.log('🔍 Debug - Print button clicked');
+              console.log('🔍 Debug - documentData:', documentData);
+              console.log('🔍 Debug - companyInfo:', companyInfo);
+              setShowPreview(true);
+            }}
+          >
             <Printer className="mr-2 h-4 w-4" /> พิมพ์
           </Button>
           <Button variant="outline" onClick={handleSendEmail}>
             <Send className="mr-2 h-4 w-4" /> ส่งอีเมล
           </Button>
-          <Button onClick={handleSave}>
-            <Save className="mr-2 h-4 w-4" /> บันทึก
+          <Button onClick={handleSave} disabled={isSubmitting || isLoadingDetail}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> กำลังบันทึก...
+              </>
+            ) : (
+              <>
+                <Save className="mr-2 h-4 w-4" /> บันทึก
+              </>
+            )}
           </Button>
         </div>
       </div>
@@ -195,7 +302,42 @@ const InvoiceEditor = ({
                         <p className="text-muted-foreground">{companyInfo.address}</p>
                         <p className="text-muted-foreground">{companyInfo.city}</p>
                         <p className="text-muted-foreground">เลขประจำตัวผู้เสียภาษี: {companyInfo.taxId}</p>
+                        {companyInfo.phone && (
+                            <p className="text-muted-foreground">โทร: {companyInfo.phone}</p>
+                        )}
+                        {companyInfo.email && (
+                            <p className="text-muted-foreground">อีเมล: {companyInfo.email}</p>
+                        )}
                     </div>
+                    {/* ข้อมูลธนาคาร */}
+                    {(companyInfo.bank_name || companyInfo.bank_account_name || companyInfo.bank_account_number) && (
+                        <div className="mt-4 p-3 border rounded-lg bg-muted/30">
+                            <h4 className="font-medium text-foreground text-sm mb-2">ข้อมูลการชำระเงิน</h4>
+                            {companyInfo.bank_name && (
+                                <p className="text-muted-foreground text-sm">ธนาคาร: {companyInfo.bank_name}</p>
+                            )}
+                            {companyInfo.bank_account_name && (
+                                <p className="text-muted-foreground text-sm">ชื่อบัญชี: {companyInfo.bank_account_name}</p>
+                            )}
+                            {companyInfo.bank_account_number && (
+                                <p className="text-muted-foreground text-sm font-mono">เลขบัญชี: {companyInfo.bank_account_number}</p>
+                            )}
+                            {companyInfo.bank_branch && (
+                                <p className="text-muted-foreground text-sm">สาขา: {companyInfo.bank_branch}</p>
+                            )}
+                        </div>
+                    )}
+                    {/* ลายเซ็น */}
+                    {companyInfo.signature_url && (
+                        <div className="mt-4">
+                            <h4 className="font-medium text-foreground text-sm mb-2">ลายเซ็น</h4>
+                            <img 
+                                src={companyInfo.signature_url} 
+                                alt="ลายเซ็น" 
+                                className="h-12 object-contain border rounded"
+                            />
+                        </div>
+                    )}
                     <div>
                         <Label htmlFor="customer">ลูกค้า</Label>
                         <select
@@ -254,11 +396,27 @@ const InvoiceEditor = ({
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <Label htmlFor="issueDate">วันที่ออก</Label>
-                            <Input type="date" id="issueDate" name="issueDate" value={documentData.issueDate} onChange={handleInputChange} />
+                            <Input 
+                                type="date" 
+                                id="issueDate" 
+                                name="issueDate" 
+                                value={documentData.issueDate ? documentData.issueDate.split('T')[0] : ''} 
+                                onChange={handleInputChange} 
+                                key={`issueDate-${documentData.issueDate}`}
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">Debug: {documentData.issueDate}</p>
                         </div>
                         <div>
                             <Label htmlFor="dueDate">ครบกำหนด</Label>
-                            <Input type="date" id="dueDate" name="dueDate" value={documentData.dueDate} onChange={handleInputChange} />
+                            <Input 
+                                type="date" 
+                                id="dueDate" 
+                                name="dueDate" 
+                                value={documentData.dueDate ? documentData.dueDate.split('T')[0] : ''} 
+                                onChange={handleInputChange} 
+                                key={`dueDate-${documentData.dueDate}`}
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">Debug: {documentData.dueDate}</p>
                         </div>
                     </div>
                 </div>
@@ -282,13 +440,68 @@ const InvoiceEditor = ({
                             {documentData.items.map((item, index) => (
                             <tr key={index}>
                                 <td className="p-2 align-top">
-                                    <Input name="description" placeholder="ชื่อสินค้า" value={item.description} onChange={(e) => handleItemChange(index, e)} className="mb-1"/>
-                                    <Textarea name="details" placeholder="รายละเอียด (กด Shift+Enter เพื่อขึ้นบรรทัดใหม่)" value={item.details} onChange={(e) => handleItemChange(index, e)} rows={1} />
+                                    <Input 
+                                        name="description" 
+                                        placeholder="ชื่อสินค้า" 
+                                        value={String(item.description || '')} 
+                                        onChange={(e) => handleItemChange(index, e)} 
+                                        className="mb-1"
+                                        key={`desc-${index}-${item.description}`}
+                                    />
+                                    <Textarea 
+                                        name="details" 
+                                        placeholder="รายละเอียด (กด Shift+Enter เพื่อขึ้นบรรทัดใหม่)" 
+                                        value={String(item.details || '')} 
+                                        onChange={(e) => handleItemChange(index, e)} 
+                                        rows={1} 
+                                        key={`details-${index}-${item.details}`}
+                                    />
+                                    <p className="text-xs text-muted-foreground">Debug: {item.description}</p>
                                 </td>
-                                <td className="p-2 align-top"><Input type="number" name="quantity" value={item.quantity} onChange={(e) => handleItemChange(index, e)} className="w-20 text-right"/></td>
-                                <td className="p-2 align-top"><Input name="unit" placeholder="หน่วย" value={item.unit} onChange={(e) => handleItemChange(index, e)} className="w-24"/></td>
-                                <td className="p-2 align-top"><Input type="number" name="unitPrice" value={item.unitPrice} onChange={(e) => handleItemChange(index, e)} className="w-28 text-right"/></td>
-                                <td className="p-2 align-top"><Input type="number" name="discount" value={item.discount} onChange={(e) => handleItemChange(index, e)} className="w-24 text-right"/></td>
+                                <td className="p-2 align-top">
+                                    <Input 
+                                        type="number" 
+                                        name="quantity" 
+                                        value={Number(item.quantity) || 1} 
+                                        onChange={(e) => handleItemChange(index, e)} 
+                                        className="w-20 text-right"
+                                        key={`qty-${index}-${item.quantity}`}
+                                    />
+                                    <p className="text-xs text-muted-foreground">Debug: {item.quantity}</p>
+                                </td>
+                                <td className="p-2 align-top">
+                                    <Input 
+                                        name="unit" 
+                                        placeholder="หน่วย" 
+                                        value={String(item.unit || '')} 
+                                        onChange={(e) => handleItemChange(index, e)} 
+                                        className="w-24"
+                                        key={`unit-${index}-${item.unit}`}
+                                    />
+                                    <p className="text-xs text-muted-foreground">Debug: {item.unit}</p>
+                                </td>
+                                <td className="p-2 align-top">
+                                    <Input 
+                                        type="number" 
+                                        name="unitPrice" 
+                                        value={Number(item.unitPrice) || 0} 
+                                        onChange={(e) => handleItemChange(index, e)} 
+                                        className="w-28 text-right"
+                                        key={`price-${index}-${item.unitPrice}`}
+                                    />
+                                    <p className="text-xs text-muted-foreground">Debug: {item.unitPrice}</p>
+                                </td>
+                                <td className="p-2 align-top">
+                                    <Input 
+                                        type="number" 
+                                        name="discount" 
+                                        value={Number(item.discount) || 0} 
+                                        onChange={(e) => handleItemChange(index, e)} 
+                                        className="w-24 text-right"
+                                        key={`discount-${index}-${item.discount}`}
+                                    />
+                                    <p className="text-xs text-muted-foreground">Debug: {item.discount}</p>
+                                </td>
                                 <td className="p-2 align-top text-right">
                                     {((item.quantity || 0) * (item.unitPrice || 0) * (1 - (item.discount || 0) / 100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </td>

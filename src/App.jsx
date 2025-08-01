@@ -15,6 +15,8 @@ import SettingsManagement from '@/components/SettingsManagement';
 import LoginPage from '@/pages/LoginPage';
 import { Toaster } from '@/components/ui/toaster';
 import QuotationManagement from '@/components/QuotationManagement';
+import PaymentVoucherManagement from '@/components/PaymentVoucherManagement';
+
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -79,7 +81,13 @@ function App() {
       case 'invoices':
         return <InvoiceManagement companyInfo={companyInfo} />;
       case 'quotations':
-        return <QuotationManagement companyInfo={companyInfo} />;
+        return <QuotationManagement 
+          companyInfo={companyInfo} 
+          onNavigateToInvoices={() => setActiveTab('invoices')}
+        />;
+      case 'payment_vouchers':
+        return <PaymentVoucherManagement companyInfo={companyInfo} />;
+
       case 'reports':
         return <ReportManagement />;
       case 'settings':
@@ -107,6 +115,7 @@ function App() {
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
         companyName={companyInfo.name}
+        companyInfo={companyInfo}
         onLogout={handleLogout}
       />
       

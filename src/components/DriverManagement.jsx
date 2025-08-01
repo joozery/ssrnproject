@@ -5,59 +5,84 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Edit, Trash2, Search, User, Phone, CreditCard, Calendar } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, User, Phone, CreditCard, Calendar, Loader2 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import PageHeader from '@/components/PageHeader';
+import api from '@/lib/axios';
 
 const DriverManagement = () => {
   const [drivers, setDrivers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
-    licenseNumber: '',
-    licenseExpiry: '',
+    id_card: '',
+    license_number: '',
+    license_expiry: '',
     address: '',
-    emergencyContact: '',
-    type: 'employee'
+    emergency_contact: ''
   });
 
   useEffect(() => {
-    const savedDrivers = localStorage.getItem('drivers');
-    if (savedDrivers) {
-      setDrivers(JSON.parse(savedDrivers));
-    }
+    fetchDrivers();
   }, []);
 
-  const saveDrivers = (updatedDrivers) => {
-    localStorage.setItem('drivers', JSON.stringify(updatedDrivers));
-    setDrivers(updatedDrivers);
+  const fetchDrivers = async () => {
+    setIsLoading(true);
+    try {
+      const response = await api.get('/drivers');
+      if (response.data.success) {
+        setDrivers(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching drivers:', error);
+      toast({
+        title: "ผิดพลาด!",
+        description: "ไม่สามารถโหลดข้อมูลพนักงานขับรถได้",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
     
-    if (editingDriver) {
-      const updatedDrivers = drivers.map(driver =>
-        driver.id === editingDriver.id ? { ...formData, id: editingDriver.id } : driver
-      );
-      saveDrivers(updatedDrivers);
-      toast({ title: "สำเร็จ!", description: "แก้ไขข้อมูลพนักงานขับรถเรียบร้อยแล้ว" });
-    } else {
-      const newDriver = {
-        ...formData,
-        id: Date.now().toString(),
-        createdAt: new Date().toLocaleDateString('th-TH')
-      };
-      saveDrivers([...drivers, newDriver]);
-      toast({ title: "สำเร็จ!", description: "เพิ่มพนักงานขับรถใหม่เรียบร้อยแล้ว" });
-    }
+    try {
+      if (editingDriver) {
+        const response = await api.put(`/drivers/${editingDriver.id}`, formData);
+        if (response.data.success) {
+          toast({ title: "สำเร็จ!", description: "แก้ไขข้อมูลพนักงานขับรถเรียบร้อยแล้ว" });
+          fetchDrivers(); // Refresh the list
+        }
+      } else {
+        const response = await api.post('/drivers', formData);
+        if (response.data.success) {
+          toast({ title: "สำเร็จ!", description: "เพิ่มพนักงานขับรถใหม่เรียบร้อยแล้ว" });
+          fetchDrivers(); // Refresh the list
+        }
+      }
 
-    setFormData({ name: '', phone: '', licenseNumber: '', licenseExpiry: '', address: '', emergencyContact: '', type: 'employee' });
-    setEditingDriver(null);
-    setIsDialogOpen(false);
+      setFormData({ name: '', phone: '', id_card: '', license_number: '', license_expiry: '', address: '', emergency_contact: '' });
+      setEditingDriver(null);
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error('Error saving driver:', error);
+      const errorMessage = error.response?.data?.error || 'ไม่สามารถบันทึกข้อมูลได้';
+      toast({
+        title: "ผิดพลาด!",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleEdit = (driver) => {
@@ -66,15 +91,28 @@ const DriverManagement = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (id) => {
-    const updatedDrivers = drivers.filter(driver => driver.id !== id);
-    saveDrivers(updatedDrivers);
-    toast({ title: "สำเร็จ!", description: "ลบข้อมูลพนักงานขับรถเรียบร้อยแล้ว" });
+  const handleDelete = async (id) => {
+    try {
+      const response = await api.delete(`/drivers/${id}`);
+      if (response.data.success) {
+        toast({ title: "สำเร็จ!", description: "ลบข้อมูลพนักงานขับรถเรียบร้อยแล้ว" });
+        fetchDrivers(); // Refresh the list
+      }
+    } catch (error) {
+      console.error('Error deleting driver:', error);
+      const errorMessage = error.response?.data?.error || 'ไม่สามารถลบข้อมูลได้';
+      toast({
+        title: "ผิดพลาด!",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
   };
 
   const filteredDrivers = drivers.filter(driver =>
     driver.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    driver.licenseNumber.toLowerCase().includes(searchTerm.toLowerCase())
+    (driver.license_number && driver.license_number.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (driver.id_card && driver.id_card.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (
@@ -99,7 +137,7 @@ const DriverManagement = () => {
           <DialogTrigger asChild>
             <Button
               onClick={() => {
-                setFormData({ name: '', phone: '', licenseNumber: '', licenseExpiry: '', address: '', emergencyContact: '', type: 'employee' });
+                setFormData({ name: '', phone: '', id_card: '', license_number: '', license_expiry: '', address: '', emergency_contact: '' });
                 setEditingDriver(null);
               }}
             >
@@ -134,35 +172,31 @@ const DriverManagement = () => {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="type">ประเภท</Label>
-                  <select
-                    id="type"
-                    value={formData.type}
-                    onChange={(e) => setFormData({...formData, type: e.target.value})}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="employee">พนักงาน</option>
-                    <option value="partner">รถร่วม</option>
-                  </select>
+                  <Label htmlFor="id_card">เลขบัตรประชาชน</Label>
+                  <Input
+                    id="id_card"
+                    value={formData.id_card}
+                    onChange={(e) => setFormData({...formData, id_card: e.target.value})}
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="licenseNumber">เลขใบขับขี่</Label>
+                  <Label htmlFor="license_number">เลขใบขับขี่</Label>
                   <Input
-                    id="licenseNumber"
-                    value={formData.licenseNumber}
-                    onChange={(e) => setFormData({...formData, licenseNumber: e.target.value})}
+                    id="license_number"
+                    value={formData.license_number}
+                    onChange={(e) => setFormData({...formData, license_number: e.target.value})}
                     required
                   />
                 </div>
                 <div>
-                  <Label htmlFor="licenseExpiry">วันหมดอายุใบขับขี่</Label>
+                  <Label htmlFor="license_expiry">วันหมดอายุใบขับขี่</Label>
                   <Input
-                    id="licenseExpiry"
+                    id="license_expiry"
                     type="date"
-                    value={formData.licenseExpiry}
-                    onChange={(e) => setFormData({...formData, licenseExpiry: e.target.value})}
+                    value={formData.license_expiry}
+                    onChange={(e) => setFormData({...formData, license_expiry: e.target.value})}
                     required
                   />
                 </div>
@@ -176,23 +210,36 @@ const DriverManagement = () => {
                 />
               </div>
               <div>
-                <Label htmlFor="emergencyContact">เบอร์ติดต่อฉุกเฉิน</Label>
+                <Label htmlFor="emergency_contact">เบอร์ติดต่อฉุกเฉิน</Label>
                 <Input
-                  id="emergencyContact"
-                  value={formData.emergencyContact}
-                  onChange={(e) => setFormData({...formData, emergencyContact: e.target.value})}
+                  id="emergency_contact"
+                  value={formData.emergency_contact}
+                  onChange={(e) => setFormData({...formData, emergency_contact: e.target.value})}
                 />
               </div>
-              <Button type="submit" className="w-full">
-                {editingDriver ? 'บันทึกการแก้ไข' : 'เพิ่มพนักงานขับรถ'}
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {editingDriver ? 'กำลังบันทึก...' : 'กำลังเพิ่ม...'}
+                  </>
+                ) : (
+                  editingDriver ? 'บันทึกการแก้ไข' : 'เพิ่มพนักงานขับรถ'
+                )}
               </Button>
             </form>
           </DialogContent>
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredDrivers.map((driver, index) => (
+      {isLoading ? (
+        <div className="flex items-center justify-center h-32">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2 text-muted-foreground">กำลังโหลดข้อมูล...</span>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredDrivers.map((driver, index) => (
           <motion.div
             key={driver.id}
             initial={{ opacity: 0, y: 20 }}
@@ -239,16 +286,16 @@ const DriverManagement = () => {
                 </div>
                 <div className="flex items-center text-muted-foreground">
                   <CreditCard className="mr-2 h-4 w-4 text-primary/70" />
-                  <span className="text-sm">{driver.licenseNumber}</span>
+                  <span className="text-sm">{driver.license_number}</span>
                 </div>
                 <div className="flex items-center text-muted-foreground">
                   <Calendar className="mr-2 h-4 w-4 text-primary/70" />
-                  <span className="text-sm">หมดอายุ: {new Date(driver.licenseExpiry).toLocaleDateString('th-TH')}</span>
+                  <span className="text-sm">หมดอายุ: {new Date(driver.license_expiry).toLocaleDateString('th-TH')}</span>
                 </div>
-                {driver.emergencyContact && (
+                {driver.emergency_contact && (
                   <div className="flex items-center text-muted-foreground">
                     <Phone className="mr-2 h-4 w-4 text-destructive/70" />
-                    <span className="text-sm">ฉุกเฉิน: {driver.emergencyContact}</span>
+                    <span className="text-sm">ฉุกเฉิน: {driver.emergency_contact}</span>
                   </div>
                 )}
                 <div className="pt-2 border-t">
@@ -260,9 +307,10 @@ const DriverManagement = () => {
             </Card>
           </motion.div>
         ))}
-      </div>
+        </div>
+      )}
 
-      {filteredDrivers.length === 0 && (
+      {!isLoading && filteredDrivers.length === 0 && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

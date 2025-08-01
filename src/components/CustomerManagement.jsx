@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Edit, Trash2, Search, Building } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Building, Loader2, Eye, Calendar, MapPin, Phone, Mail, User, Hash } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import PageHeader from '@/components/PageHeader';
+import api from '@/lib/axios';
 import {
   Table,
   TableBody,
@@ -21,50 +22,81 @@ const CustomerManagement = () => {
   const [customers, setCustomers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
-    company: '',
+    contact_person: '',
     phone: '',
     email: '',
     address: '',
-    taxId: ''
+    tax_id: ''
   });
 
   useEffect(() => {
-    const savedCustomers = localStorage.getItem('customers');
-    if (savedCustomers) {
-      setCustomers(JSON.parse(savedCustomers));
-    }
+    fetchCustomers();
   }, []);
 
-  const saveCustomers = (updatedCustomers) => {
-    localStorage.setItem('customers', JSON.stringify(updatedCustomers));
-    setCustomers(updatedCustomers);
+  const fetchCustomers = async () => {
+    setIsLoading(true);
+    try {
+      const response = await api.get('/customers');
+      if (response.data.success) {
+        setCustomers(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+      toast({
+        title: "ผิดพลาด!",
+        description: "ไม่สามารถโหลดข้อมูลลูกค้าได้",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
     
-    if (editingCustomer) {
-      const updatedCustomers = customers.map(customer =>
-        customer.id === editingCustomer.id ? { ...formData, id: editingCustomer.id } : customer
-      );
-      saveCustomers(updatedCustomers);
-      toast({ title: "สำเร็จ!", description: "แก้ไขข้อมูลลูกค้าเรียบร้อยแล้ว" });
-    } else {
-      const newCustomer = {
-        ...formData,
-        id: Date.now().toString(),
-        createdAt: new Date().toLocaleDateString('th-TH')
-      };
-      saveCustomers([...customers, newCustomer]);
-      toast({ title: "สำเร็จ!", description: "เพิ่มลูกค้าใหม่เรียบร้อยแล้ว" });
-    }
+    try {
+      if (editingCustomer) {
+        const response = await api.put(`/customers/${editingCustomer.id}`, formData);
+        if (response.data.success) {
+          toast({ title: "สำเร็จ!", description: "แก้ไขข้อมูลลูกค้าเรียบร้อยแล้ว" });
+          fetchCustomers(); // Refresh the list
+        }
+      } else {
+        const response = await api.post('/customers', formData);
+        if (response.data.success) {
+          toast({ title: "สำเร็จ!", description: "เพิ่มลูกค้าใหม่เรียบร้อยแล้ว" });
+          fetchCustomers(); // Refresh the list
+        }
+      }
 
-    setFormData({ name: '', company: '', phone: '', email: '', address: '', taxId: '' });
-    setEditingCustomer(null);
-    setIsDialogOpen(false);
+      setFormData({ name: '', contact_person: '', phone: '', email: '', address: '', tax_id: '' });
+      setEditingCustomer(null);
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error('Error saving customer:', error);
+      const errorMessage = error.response?.data?.error || 'ไม่สามารถบันทึกข้อมูลได้';
+      toast({
+        title: "ผิดพลาด!",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleViewDetails = (customer) => {
+    setSelectedCustomer(customer);
+    setIsDetailDialogOpen(true);
   };
 
   const handleEdit = (customer) => {
@@ -73,17 +105,29 @@ const CustomerManagement = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (id) => {
-    const updatedCustomers = customers.filter(customer => customer.id !== id);
-    saveCustomers(updatedCustomers);
-    toast({ title: "สำเร็จ!", description: "ลบข้อมูลลูกค้าเรียบร้อยแล้ว" });
+  const handleDelete = async (id) => {
+    try {
+      const response = await api.delete(`/customers/${id}`);
+      if (response.data.success) {
+        toast({ title: "สำเร็จ!", description: "ลบข้อมูลลูกค้าเรียบร้อยแล้ว" });
+        fetchCustomers(); // Refresh the list
+      }
+    } catch (error) {
+      console.error('Error deleting customer:', error);
+      const errorMessage = error.response?.data?.error || 'ไม่สามารถลบข้อมูลได้';
+      toast({
+        title: "ผิดพลาด!",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
   };
 
   const filteredCustomers = customers.filter(customer =>
     customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (customer.contact_person && customer.contact_person.toLowerCase().includes(searchTerm.toLowerCase())) ||
     customer.phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.email.toLowerCase().includes(searchTerm.toLowerCase())
+    (customer.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (
@@ -108,7 +152,7 @@ const CustomerManagement = () => {
           <DialogTrigger asChild>
             <Button
               onClick={() => {
-                setFormData({ name: '', company: '', phone: '', email: '', address: '', taxId: '' });
+                setFormData({ name: '', contact_person: '', phone: '', email: '', address: '', tax_id: '' });
                 setEditingCustomer(null);
               }}
             >
@@ -134,12 +178,11 @@ const CustomerManagement = () => {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="company">บริษัท</Label>
+                  <Label htmlFor="contact_person">ผู้ติดต่อ</Label>
                   <Input
-                    id="company"
-                    value={formData.company}
-                    onChange={(e) => setFormData({...formData, company: e.target.value})}
-                    required
+                    id="contact_person"
+                    value={formData.contact_person}
+                    onChange={(e) => setFormData({...formData, contact_person: e.target.value})}
                   />
                 </div>
               </div>
@@ -172,15 +215,22 @@ const CustomerManagement = () => {
                 />
               </div>
               <div>
-                <Label htmlFor="taxId">เลขประจำตัวผู้เสียภาษี</Label>
+                <Label htmlFor="tax_id">เลขประจำตัวผู้เสียภาษี</Label>
                 <Input
-                  id="taxId"
-                  value={formData.taxId}
-                  onChange={(e) => setFormData({...formData, taxId: e.target.value})}
+                  id="tax_id"
+                  value={formData.tax_id}
+                  onChange={(e) => setFormData({...formData, tax_id: e.target.value})}
                 />
               </div>
-              <Button type="submit" className="w-full">
-                {editingCustomer ? 'บันทึกการแก้ไข' : 'เพิ่มลูกค้า'}
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {editingCustomer ? 'กำลังบันทึก...' : 'กำลังเพิ่ม...'}
+                  </>
+                ) : (
+                  editingCustomer ? 'บันทึกการแก้ไข' : 'เพิ่มลูกค้า'
+                )}
               </Button>
             </form>
           </DialogContent>
@@ -189,13 +239,23 @@ const CustomerManagement = () => {
 
       <Card>
         <CardContent className="p-0">
-          <Table>
+          {isLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <span className="ml-2 text-muted-foreground">กำลังโหลดข้อมูล...</span>
+            </div>
+          ) : (
+            <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>รหัสลูกค้า</TableHead>
                 <TableHead>ชื่อ-นามสกุล</TableHead>
-                <TableHead>บริษัท</TableHead>
+                <TableHead>ผู้ติดต่อ</TableHead>
                 <TableHead>เบอร์โทร</TableHead>
                 <TableHead>อีเมล</TableHead>
+                <TableHead>ที่อยู่</TableHead>
+                <TableHead>เลขประจำตัวผู้เสียภาษี</TableHead>
+                <TableHead>วันที่สร้าง</TableHead>
                 <TableHead className="text-right">จัดการ</TableHead>
               </TableRow>
             </TableHeader>
@@ -203,16 +263,33 @@ const CustomerManagement = () => {
               {filteredCustomers.length > 0 ? (
                 filteredCustomers.map((customer) => (
                   <TableRow key={customer.id}>
+                    <TableCell className="font-mono text-sm text-gray-600">{customer.id}</TableCell>
                     <TableCell className="font-medium">{customer.name}</TableCell>
-                    <TableCell>{customer.company}</TableCell>
+                    <TableCell>{customer.contact_person || '-'}</TableCell>
                     <TableCell>{customer.phone}</TableCell>
                     <TableCell>{customer.email || '-'}</TableCell>
+                    <TableCell className="max-w-xs truncate" title={customer.address}>
+                      {customer.address || '-'}
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">{customer.tax_id || '-'}</TableCell>
+                    <TableCell className="text-sm text-gray-600">
+                      {new Date(customer.created_at).toLocaleDateString('th-TH')}
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end space-x-1">
                         <Button
                           size="sm"
                           variant="ghost"
+                          onClick={() => handleViewDetails(customer)}
+                          title="ดูรายละเอียด"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
                           onClick={() => handleEdit(customer)}
+                          title="แก้ไข"
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -221,6 +298,7 @@ const CustomerManagement = () => {
                           variant="ghost"
                           onClick={() => handleDelete(customer.id)}
                           className="text-destructive hover:text-destructive"
+                          title="ลบ"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -230,15 +308,116 @@ const CustomerManagement = () => {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center">
+                  <TableCell colSpan={9} className="h-24 text-center">
                     {searchTerm ? 'ไม่พบลูกค้าที่ค้นหา' : 'ยังไม่มีข้อมูลลูกค้า'}
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
+
+      {/* Customer Detail Modal */}
+      <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="h-5 w-5" />
+              รายละเอียดลูกค้า
+            </DialogTitle>
+          </DialogHeader>
+          {selectedCustomer && (
+            <div className="space-y-6">
+              {/* Customer ID */}
+              <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                <Hash className="h-4 w-4 text-gray-600" />
+                <div>
+                  <p className="text-sm text-gray-600">รหัสลูกค้า</p>
+                  <p className="font-mono font-medium">{selectedCustomer.id}</p>
+                </div>
+              </div>
+
+              {/* Basic Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg">
+                  <User className="h-4 w-4 text-blue-600" />
+                  <div>
+                    <p className="text-sm text-blue-600">ชื่อ-นามสกุล</p>
+                    <p className="font-medium">{selectedCustomer.name}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg">
+                  <User className="h-4 w-4 text-green-600" />
+                  <div>
+                    <p className="text-sm text-green-600">ผู้ติดต่อ</p>
+                    <p className="font-medium">{selectedCustomer.contact_person || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center gap-2 p-3 bg-orange-50 rounded-lg">
+                  <Phone className="h-4 w-4 text-orange-600" />
+                  <div>
+                    <p className="text-sm text-orange-600">เบอร์โทรศัพท์</p>
+                    <p className="font-medium">{selectedCustomer.phone}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 p-3 bg-purple-50 rounded-lg">
+                  <Mail className="h-4 w-4 text-purple-600" />
+                  <div>
+                    <p className="text-sm text-purple-600">อีเมล</p>
+                    <p className="font-medium">{selectedCustomer.email || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Address */}
+              <div className="flex items-start gap-2 p-3 bg-yellow-50 rounded-lg">
+                <MapPin className="h-4 w-4 text-yellow-600 mt-1" />
+                <div className="flex-1">
+                  <p className="text-sm text-yellow-600">ที่อยู่</p>
+                  <p className="font-medium whitespace-pre-wrap">{selectedCustomer.address || '-'}</p>
+                </div>
+              </div>
+
+              {/* Tax ID */}
+              <div className="flex items-center gap-2 p-3 bg-red-50 rounded-lg">
+                <Hash className="h-4 w-4 text-red-600" />
+                <div>
+                  <p className="text-sm text-red-600">เลขประจำตัวผู้เสียภาษี</p>
+                  <p className="font-mono font-medium">{selectedCustomer.tax_id || '-'}</p>
+                </div>
+              </div>
+
+              {/* Timestamps */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                  <Calendar className="h-4 w-4 text-gray-600" />
+                  <div>
+                    <p className="text-sm text-gray-600">วันที่สร้าง</p>
+                    <p className="font-medium">
+                      {new Date(selectedCustomer.created_at).toLocaleString('th-TH')}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                  <Calendar className="h-4 w-4 text-gray-600" />
+                  <div>
+                    <p className="text-sm text-gray-600">วันที่อัปเดต</p>
+                    <p className="font-medium">
+                      {new Date(selectedCustomer.updated_at).toLocaleString('th-TH')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

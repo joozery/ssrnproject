@@ -5,9 +5,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Loader2 } from 'lucide-react';
+import { toast } from '@/components/ui/use-toast';
+import api from '@/lib/axios';
 
-const JobOrderForm = ({ initialData, customers, drivers, vehicles, onSave, onBack }) => {
+const JobOrderForm = ({ initialData, customers, drivers, vehicles, onSave, onBack, isSubmitting = false }) => {
+  const [localCustomers, setLocalCustomers] = useState([]);
+  const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
   const [formData, setFormData] = useState({
     jobOrderNumber: '',
     jobOrderVolume: '',
@@ -37,6 +41,14 @@ const JobOrderForm = ({ initialData, customers, drivers, vehicles, onSave, onBac
   });
 
   useEffect(() => {
+    if (customers && customers.length > 0) {
+      setLocalCustomers(customers);
+    } else {
+      fetchCustomers();
+    }
+  }, [customers]);
+
+  useEffect(() => {
     if (initialData) {
       setFormData({ ...initialData });
     } else {
@@ -45,15 +57,47 @@ const JobOrderForm = ({ initialData, customers, drivers, vehicles, onSave, onBac
     }
   }, [initialData]);
 
+  const fetchCustomers = async () => {
+    setIsLoadingCustomers(true);
+    try {
+      const response = await api.get('/customers');
+      if (response.data.success) {
+        setLocalCustomers(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+      toast({
+        title: "ผิดพลาด!",
+        description: "ไม่สามารถโหลดข้อมูลลูกค้าได้",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingCustomers(false);
+    }
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // เมื่อเลือกลูกค้า ให้เติมที่อยู่ออกใบเสร็จอัตโนมัติทันที
+    if (name === 'customerId' && value) {
+      const selectedCustomer = localCustomers.find(c => c.id === value);
+      if (selectedCustomer && selectedCustomer.address) {
+        setFormData(prev => ({ ...prev, invoiceAddress: selectedCustomer.address }));
+      } else {
+        // ถ้าไม่มีที่อยู่ในฐานข้อมูล ให้ล้างช่องที่อยู่ออกใบเสร็จ
+        setFormData(prev => ({ ...prev, invoiceAddress: '' }));
+      }
+    }
   };
 
   const handleFeeChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
   };
+
+
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -108,10 +152,31 @@ const JobOrderForm = ({ initialData, customers, drivers, vehicles, onSave, onBac
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="customerId">ลูกค้า</Label>
-                <select id="customerId" name="customerId" value={formData.customerId} onChange={handleInputChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" required>
-                  <option value="">เลือกลูกค้า</option>
-                  {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <div className="relative">
+                  <select 
+                    id="customerId" 
+                    name="customerId" 
+                    value={formData.customerId} 
+                    onChange={handleInputChange} 
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" 
+                    required
+                    disabled={isLoadingCustomers}
+                  >
+                    <option value="">
+                      {isLoadingCustomers ? 'กำลังโหลด...' : 'เลือกลูกค้า'}
+                    </option>
+                    {localCustomers.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  {isLoadingCustomers && (
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
                 <Label htmlFor="invoiceAddress">ที่อยู่ออกใบเสร็จ</Label>
@@ -192,7 +257,7 @@ const JobOrderForm = ({ initialData, customers, drivers, vehicles, onSave, onBac
                 <Label htmlFor="vehicleId">ทะเบียนรถ</Label>
                 <select id="vehicleId" name="vehicleId" value={formData.vehicleId} onChange={handleInputChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" required>
                   <option value="">เลือกรถ</option>
-                  {vehicles.map(v => <option key={v.id} value={v.id}>{v.licensePlate}</option>)}
+                  {vehicles.map(v => <option key={v.id} value={v.id}>{v.license_plate}</option>)}
                 </select>
               </div>
             </div>
