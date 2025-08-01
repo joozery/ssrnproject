@@ -16,6 +16,7 @@ import LoginPage from '@/pages/LoginPage';
 import { Toaster } from '@/components/ui/toaster';
 import QuotationManagement from '@/components/QuotationManagement';
 import PaymentVoucherManagement from '@/components/PaymentVoucherManagement';
+import api from '@/lib/axios';
 
 
 function App() {
@@ -30,6 +31,41 @@ function App() {
     email: 'อีเมล',
     logoUrl: ''
   });
+  const [isLoadingCompanyInfo, setIsLoadingCompanyInfo] = useState(true);
+
+  // Fetch company info from API
+  const fetchCompanyInfo = async () => {
+    try {
+      const response = await api.get('/company-info');
+      const apiData = response.data;
+      
+      // Update state with API data
+      setCompanyInfo(apiData);
+      
+      // Save to localStorage as backup
+      localStorage.setItem('companyInfo', JSON.stringify(apiData));
+      
+      console.log('✅ Company info loaded from API:', apiData);
+    } catch (error) {
+      console.error('❌ Error fetching company info from API:', error);
+      
+      // Fallback to localStorage
+      const savedCompanyInfo = localStorage.getItem('companyInfo');
+      if (savedCompanyInfo) {
+        try {
+          const parsedInfo = JSON.parse(savedCompanyInfo);
+          setCompanyInfo(parsedInfo);
+          console.log('📦 Company info loaded from localStorage:', parsedInfo);
+        } catch (parseError) {
+          console.error('❌ Error parsing localStorage company info:', parseError);
+        }
+      } else {
+        console.log('⚠️ No company info found in localStorage, using defaults');
+      }
+    } finally {
+      setIsLoadingCompanyInfo(false);
+    }
+  };
 
   useEffect(() => {
     const loggedInUser = localStorage.getItem('isAuthenticated');
@@ -37,10 +73,8 @@ function App() {
       setIsAuthenticated(true);
     }
 
-    const savedCompanyInfo = localStorage.getItem('companyInfo');
-    if (savedCompanyInfo) {
-      setCompanyInfo(JSON.parse(savedCompanyInfo));
-    }
+    // Fetch company info when component mounts
+    fetchCompanyInfo();
   }, []);
 
   const handleLogin = () => {
@@ -60,6 +94,18 @@ function App() {
 
   if (!isAuthenticated) {
     return <LoginPage onLogin={handleLogin} companyInfo={companyInfo} />;
+  }
+
+  // Show loading state while fetching company info
+  if (isLoadingCompanyInfo) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-secondary/50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">กำลังโหลดข้อมูลบริษัท...</p>
+        </div>
+      </div>
+    );
   }
 
   const renderContent = () => {
